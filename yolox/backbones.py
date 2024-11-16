@@ -111,32 +111,61 @@ class CSPLayer(torch.nn.Module):
             self,
             in_channels: int,
             out_channels: int,
-            num_layers: int,
+            num_blocks: int,
             *args,
             **kwargs
     ):
         super().__init__(*args, **kwargs)
 
-        reduce_channel: int = out_channels // 2 + out_channels % 2
-        bypass_channel: int = out_channels // 2 + out_channels % 2
+        split_channels = out_channels // 2  # reduce_channel 改为更通用的 split_channels
+        main_channels = split_channels  # bypass_channel 可以简化
+        shortcut_channels = out_channels - split_channels  # 处理奇数通道更优雅
 
-        self.conv_reduce: ConvModule = ConvModule(
+        # 主路径
+        self.main_conv = ConvModule(
             in_channels=in_channels,
-            out_channels=reduce_channel,
+            out_channels=main_channels,
             kernel_size=3,
             stride=1,
             padding=1,
         )
 
-        self.conv_bypass: ConvModule = ConvModule(
+        # shortcut路径
+        self.shortcut_conv = ConvModule(
             in_channels=in_channels,
-            out_channels=bypass_channel,
+            out_channels=shortcut_channels,
             kernel_size=3,
             stride=1,
             padding=1,
         )
 
-        raise NotImplementedError
+        # Bottleneck blocks
+        self.blocks = torch. nn.Sequential(*(
+            DarknetBottleneck(
+                in_channels=main_channels,
+                out_channels=main_channels,
+                add=True,
+            )
+            for _ in range(num_blocks)
+        ))
 
-        self.layers: torch.nn.Sequential = torch.nn.Sequential(
+        # 融合卷积
+        self.final_conv = ConvModule(
+            in_channels=out_channels,  # main_channels + shortcut_channels
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
         )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # shortcut path
+        shortcut = self.shortcut_conv(x)
+
+        # main path
+        main = self.main_conv(x)
+        main = self.blocks(main)
+
+        # concat and final conv
+        out = torch.cat([shortcut, main], dim=1)
+        return self.final_conv(out)
