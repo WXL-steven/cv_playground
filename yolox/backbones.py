@@ -1,16 +1,21 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, field
 from typing import Optional
 
 import torch
 
-from yolox.modules import ConvModule, DarknetBottleneck, FocusBlock, CSPLayer, SPPFBottleneck
+from yolox.modules import ConvModule, FocusBlock, CSPLayer, SPPFBottleneck
 
 
 @dataclass
 class CSPDarknetStageFeatures:
-    stage2: torch.Tensor
-    stage3: torch.Tensor
-    stage4: torch.Tensor
+    stage2: Optional[torch.Tensor] = field(default=None)
+    stage3: Optional[torch.Tensor] = field(default=None)
+    stage4: Optional[torch.Tensor] = field(default=None)
+
+    def __iter__(self) -> iter:
+        self: dataclass  # 这是给若智PyCharm的静态分析看的
+        for f in fields(self):
+            yield f.name, getattr(self, f.name)
 
 
 class CSPDarknet(torch.nn.Module):
@@ -116,3 +121,14 @@ class CSPDarknet(torch.nn.Module):
         # [N, 1024, H/32, W/32] / [20, 20]
 
         return CSPDarknetStageFeatures(feature2, feature3, feature4)
+
+
+def _test():
+    module = CSPDarknet()
+    features = module(torch.zeros((1, 3, 640, 640)))
+    for name, feature in features:
+        print(f"{name}: {feature.shape if feature is not None else 'None'}")
+
+
+if __name__ == "__main__":
+    _test()
