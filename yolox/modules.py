@@ -112,6 +112,7 @@ class CSPLayer(torch.nn.Module):
             in_channels: int,
             out_channels: int,
             num_blocks: int,
+            add: bool,
             *args,
             **kwargs
     ):
@@ -145,7 +146,7 @@ class CSPLayer(torch.nn.Module):
                 DarknetBottleneck(
                     in_channels=main_channels,
                     out_channels=main_channels,
-                    add=True,
+                    add=add,
                 )
                 for _ in range(num_blocks)
             )
@@ -173,7 +174,7 @@ class CSPLayer(torch.nn.Module):
         return self.final_conv(out)
 
 # TODO: Need Check
-class SPPFBottleneck:
+class SPPFBottleneck(torch.nn.Module):
     def __init__(
             self,
             in_channels: int,
@@ -183,6 +184,9 @@ class SPPFBottleneck:
     ):
         super().__init__(*args, **kwargs)
 
+        if out_channels % 2 != 0:
+            raise ValueError("out_channels must be even.")
+
         self.conv1: ConvModule = ConvModule(
             in_channels=in_channels,
             out_channels=out_channels // 2,
@@ -191,6 +195,7 @@ class SPPFBottleneck:
             padding=1,
         )
 
+        # 此处将步长(stride)设置为1并配置填充(stride)为1/2核大小(kernel_size)来实现不改变输出大小的池化
         self.max_pool1: torch.nn.MaxPool2d = torch.nn.MaxPool2d(
             kernel_size=5,
             stride=1,
