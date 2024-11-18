@@ -172,7 +172,6 @@ class CSPLayer(torch.nn.Module):
         out = torch.cat([shortcut, main], dim=1)
         return self.final_conv(out)
 
-
 # TODO: Need Check
 class SPPFBottleneck(torch.nn.Module):
     def __init__(

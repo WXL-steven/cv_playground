@@ -1,3 +1,4 @@
+# See: https://github.com/open-mmlab/mmyolo/tree/main/configs/yolox
 from dataclasses import dataclass, fields, field
 from typing import Optional
 
@@ -124,8 +125,13 @@ class CSPDarknet(torch.nn.Module):
 
 
 def _test():
+    import time
+    t0 = time.time()
     module = CSPDarknet()
+    print(f"Module created in {(time.time() - t0) * 1000:.2f} ms")
+    t0 = time.time()
     features = module(torch.zeros((1, 3, 640, 640)))
+    print(f"Forward in {(time.time() - t0) * 1000:.2f} ms")
     for name, feature in features:
         print(f"{name}: {feature.shape if feature is not None else 'None'}")
 
