@@ -4,12 +4,12 @@ from typing import Optional
 
 import torch
 
-from yolox.modules import ConvModule, FocusBlock, CSPLayer, SPPFBottleneck
+from yolox.modules import ConvModule, CSPLayer
 from yolox.backbones import CSPDarknetStageFeatures
 
 
 @dataclass
-class PAFPNStageFeatures:
+class PAFPNOutputFeatures:
     out0: Optional[torch.Tensor] = field(default=None)
     out1: Optional[torch.Tensor] = field(default=None)
     out2: Optional[torch.Tensor] = field(default=None)
@@ -118,29 +118,70 @@ class PAFPN(torch.nn.Module):
             mode='nearest'  # 使用最邻近上采样
         )
 
-    def forward(self, features: CSPDarknetStageFeatures) -> PAFPNStageFeatures:
-        # [N, 1024, 20, 20]
+    def forward(self, features: CSPDarknetStageFeatures) -> PAFPNOutputFeatures:
+        # [N, 1024, 20, 20] (features.stage4)
         reduce_out = self.reduce_layer1(features.stage4)
+        # [N, 512, 20, 20]
         up_sample2 = self.up_sample(reduce_out)
+        # [N, 512, 40, 40]
         top_down_out2 = self.top_down_layer2(
             torch.concat((features.stage3, up_sample2), dim=1)
+            # [N, 1024, 40, 40]
         )
+        # [N, 256, 40, 40]
         up_sample1 = self.up_sample(top_down_out2)
+        # [N, 256, 80, 80]
         top_down_out1 = self.top_down_layer1(
             torch.concat((features.stage2, up_sample1), dim=1)
+            # [N, 512, 80, 80]
         )
 
+        # [N, 256, 80, 80]
         down_sample_out0 = self.down_scamp0(top_down_out1)
+        # [N, 256, 40, 40]
         bottom_up_out0 = self.bottom_up_layer0(
             torch.concat((down_sample_out0, top_down_out2), dim=1)
+            # [N, 512, 40, 40]
         )
+        # [N, 512, 40, 40]
         down_sample_out1 = self.down_scamp1(bottom_up_out0)
+        # [N, 512, 20, 20]
         bottom_up_out1 = self.bottom_up_layer1(
             torch.concat((down_sample_out1, reduce_out), dim=1)
+            # [N, 1024, 20, 20]
         )
 
+        # [N, 256, 80, 80]
         out0 = self.out_layer0(top_down_out1)
-        out1 = self.out_layer1(bottom_up_out0)
-        out2 = self.out_layer2(bottom_up_out1)
+        # [N, 256, 80, 80]
 
-        return PAFPNStageFeatures(out0, out1, out2)
+        # [N, 512, 40, 40]
+        out1 = self.out_layer1(bottom_up_out0)
+        # [N, 256, 40, 40]
+
+        # [N, 1024, 20, 20]
+        out2 = self.out_layer2(bottom_up_out1)
+        # [N, 256, 20, 20]
+
+        return PAFPNOutputFeatures(out0, out1, out2)
+
+
+def _test():
+    import time
+    t0 = time.time()
+    module = PAFPN()
+    print(f"Module created in {(time.time() - t0) * 1000:.2f} ms")
+    t0 = time.time()
+    features = CSPDarknetStageFeatures(
+        torch.zeros((1, 256, 80, 80)),
+        torch.zeros((1, 512, 40, 40)),
+        torch.zeros((1, 1024, 20, 20))
+    )
+    features = module(features)
+    print(f"Forward in {(time.time() - t0) * 1000:.2f} ms")
+    for name, feature in features:
+        print(f"{name}: {feature.shape if feature is not None else 'None'}")
+
+
+if __name__ == "__main__":
+    _test()
