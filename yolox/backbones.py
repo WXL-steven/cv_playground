@@ -13,10 +13,19 @@ class CSPDarknetStageFeatures:
     stage3: Optional[torch.Tensor] = field(default=None)
     stage4: Optional[torch.Tensor] = field(default=None)
 
+    def __post_init__(self):
+        self._data = (self.stage2, self.stage3, self.stage4)
+
+    def __getitem__(self, idx):
+        return self._data[idx]
+
     def __iter__(self) -> iter:
         self: dataclass  # 这是给若智PyCharm的静态分析看的
         for f in fields(self):
             yield f.name, getattr(self, f.name)
+
+    def __len__(self) -> int:
+        return len(self._data)
 
 
 class CSPDarknet(torch.nn.Module):

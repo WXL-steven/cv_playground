@@ -13,10 +13,19 @@ class BBoxArchResult:
     reg: Optional[torch.Tensor] = field(default=None)
     obj: Optional[torch.Tensor] = field(default=None)
 
+    def __post_init__(self):
+        self._data = (self.cls, self.reg, self.obj)
+
+    def __getitem__(self, idx):
+        return self._data[idx]
+
     def __iter__(self) -> iter:
         self: dataclass  # 这是给若智PyCharm的静态分析看的
         for f in fields(self):
             yield f.name, getattr(self, f.name)
+
+    def __len__(self) -> int:
+        return len(self._data)
 
 
 class YOLOXHead(torch.nn.Module):

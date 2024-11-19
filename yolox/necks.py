@@ -14,10 +14,19 @@ class PAFPNOutputFeatures:
     out1: Optional[torch.Tensor] = field(default=None)
     out2: Optional[torch.Tensor] = field(default=None)
 
+    def __post_init__(self):
+        self._data = (self.out0, self.out1, self.out2)
+
+    def __getitem__(self, idx):
+        return self._data[idx]
+
     def __iter__(self) -> iter:
         self: dataclass  # 这是给若智PyCharm的静态分析看的
         for f in fields(self):
             yield f.name, getattr(self, f.name)
+
+    def __len__(self) -> int:
+        return len(self._data)
 
 
 class PAFPN(torch.nn.Module):
