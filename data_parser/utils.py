@@ -1,13 +1,13 @@
 from pathlib import Path
+from typing import Union, Tuple
 from collections import defaultdict
-from typing import Tuple, Union
+import os
 
 
 class FileCache:
     def __init__(
             self,
             directory: Union[str, Path],
-            recursive: bool = False,
             max_cache: int = 200000
     ) -> None:
         """
@@ -15,11 +15,9 @@ class FileCache:
 
         Args:
             directory: 要搜索的目录
-            recursive: 是否递归搜索子目录
             max_cache: 最大缓存条目数，小于1表示不限制
         """
         self.directory = Path(directory)
-        self.recursive = recursive
         self.max_cache = max_cache
         self.cache = defaultdict(tuple)
         self._build_cache()
@@ -36,13 +34,14 @@ class FileCache:
         """建立文件索引缓存"""
         files = []
         counter = 0
-        # 根据recursive参数决定使用rglob还是glob
-        pattern = '**/*' if self.recursive else '*'
 
-        # 收集所有文件
-        for file_path in self.directory.glob(pattern):
-            if file_path.is_file():  # 只处理文件
-                files.append(file_path)
+        # 使用os.scandir()只扫描一层目录
+        with os.scandir(self.directory) as entries:
+            for entry in entries:
+                if entry.is_dir():  # 只处理文件,忽略文件夹
+                    continue
+
+                files.append(Path(entry.path))
 
                 # 检查是否超过最大缓存限制
                 counter += 1
@@ -81,6 +80,20 @@ class FileCache:
     def __str__(self) -> str:
         """返回缓存状态的字符串表示"""
         return (f"FileCache(directory='{self.directory}', "
-                f"recursive={self.recursive}, "
                 f"cached_files={len(self)})")
 
+
+def _test():
+    import time
+    t0 = time.time()
+    cache = FileCache(r'../datasets/VOC2012/JPEGImages')
+    print(f"Cache created in {(time.time() - t0) * 1000:.2f} ms")
+    t0 = time.time()
+    matches = cache.find_matches('2007_000783')
+    print(f"Find matches in {(time.time() - t0) * 1000:.2f} ms")
+    print(f"Cache length: {len(cache)}")
+    print(f"Cache: {matches}")
+
+
+if __name__ == '__main__':
+    _test()
