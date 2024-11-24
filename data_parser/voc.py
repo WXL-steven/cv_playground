@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union, Tuple, List, Callable, Set
+from typing import Optional, Union, Tuple, List, Callable, Set, Dict
 
 import torch
 from torch.utils.data import Dataset
@@ -209,13 +209,22 @@ class VOC2012BBoxDataset(Dataset):
 
         return
 
+    def rebuild_cache(self) -> None:
+        # 重建实例元组(弹出图像不存在的实例)
+        self.samples = tuple(sample for sample in self.samples if sample.image_available is not False)
+
+        # 生成类别名预设
+        self.id_to_name = dict(enumerate(sorted(self.class_names)))
+        self.name_to_id = {v: k for k, v in self.id_to_name.items()}
+
     def __init__(
             self,
             split_file_path: Union[str, Path],
             root_dir: Optional[Union[str, Path]] = None,
             images_dir: Optional[Union[str, Path]] = None,
             annotations_dir: Optional[Union[str, Path]] = None,
-            auto_scan: bool = True
+            auto_scan: bool = True,
+            use_rgb: bool = False
     ) -> None:
         # 超类实例化
         super().__init__()
@@ -226,6 +235,10 @@ class VOC2012BBoxDataset(Dataset):
         self.annotations_dir: Path
         self.samples: List[VOC2012BBoxMetadata]
         self.class_names: Set[str] = set()
+        self.name_to_id: Dict[str, int] = dict()
+        self.id_to_name: Dict[int, str] = dict()
+
+        self.use_rgb = use_rgb
 
         # 处理路径
         self.split_file_path, self.images_dir, self.annotations_dir = self._check_and_get_paths(
@@ -235,7 +248,6 @@ class VOC2012BBoxDataset(Dataset):
         # 将实例加载到内存
         self.samples = self._load_split_file(self.split_file_path)
 
-        # TODO: 考虑将此设置为手动调用可选功能
         # 扫描全部实例的图像以确保其存在并生成统计
         if auto_scan:
             t0 = time.time()
@@ -264,12 +276,8 @@ class VOC2012BBoxDataset(Dataset):
                   f"avg. {t * 1000 / len(self.samples):.2f} ms per item, "
                   f"avg. {num_objects / len(self.samples):.2f} objects per object.")
 
-            # 重建实例元组(弹出图像不存在的实例)
-            self.samples = tuple(sample for sample in self.samples if sample.image_available)
-
-            # 生成类别名预设
-            self.id_to_name = dict(enumerate(sorted(self.class_names)))
-            self.name_to_id = self.name_to_idx = {v: k for k, v in self.id_to_name.items()}
+            # 重建缓存
+            self.rebuild_cache()
 
             # 简报
             num_objects = sum(sample.num_objects for sample in self.samples)
@@ -277,8 +285,13 @@ class VOC2012BBoxDataset(Dataset):
                   f"with {num_objects} objects "
                   f"in {len(self.class_names)} classes.")
         else:
-            # TODO: 在未扫描情况下,考虑如何初始化
-            raise NotImplementedError
+            for sample in self.samples:
+                # 填充图像和标注路径
+                if sample.image_path is None:
+                    sample.image_path = self.images_dir / (sample.sample_name + self.ACCEPTED_IMAGE_EXTENSIONS[0])
+                if sample.annotation_path is None:
+                    sample.annotation_path = (self.annotations_dir /
+                                              (sample.sample_name + self.ACCEPTED_ANNOTATION_EXTENSIONS[0]))
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -290,11 +303,12 @@ class VOC2012BBoxDataset(Dataset):
         image = cv2.imread(sample_instance.image_path.as_posix())
         if image is None:
             raise RuntimeError(f"Failed to load image {sample_instance.image_path}")
-        # TODO: 颜色空间选项
+        if self.use_rgb:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image_tensor = torch.from_numpy(image)
 
         # 载入标注
-        if not sample_instance.annotation_available or sample_instance.num_objects <= 0:
+        if sample_instance.annotation_available is False or sample_instance.num_objects == 0:
             return VOC2012BBoxContent(
                 sample_name=sample_instance.sample_name,
                 image=image_tensor,
@@ -307,10 +321,19 @@ class VOC2012BBoxDataset(Dataset):
         obj_nodes = e_tree.xpath('/annotation/object')
         for obj_node in obj_nodes:
             cls_name, xmin, ymin, xmax, ymax = self._parse_boxes(obj_node)
-            cls_id = self.name_to_id[cls_name]  # May raise KeyError
+            cls_id = self.name_to_id.get(cls_name, -1)
+
+            if cls_id == -1:
+                self.class_names.add(cls_name)
+                cls_id = len(self.class_names)
+                self.name_to_id[cls_name] = cls_id
+                self.id_to_name[cls_id] = cls_name
+
             annotation.append([cls_id, xmin, ymin, xmax, ymax])
 
         annotation = torch.tensor(annotation, dtype=torch.float32)
+
+        # TODO: 处理数据增强
 
         return VOC2012BBoxContent(
             sample_name=sample_instance.sample_name,
@@ -322,7 +345,8 @@ class VOC2012BBoxDataset(Dataset):
 def _test():
     dataset = VOC2012BBoxDataset(
         split_file_path=r"../datasets/VOC2012/ImageSets/Main/train.txt",
-        root_dir=r"../datasets/VOC2012/"
+        root_dir=r"../datasets/VOC2012/",
+        auto_scan=False
     )
 
     print(f"Dataset size: {len(dataset)}")
@@ -340,7 +364,7 @@ def _test():
             for cls_id, xmin, ymin, xmax, ymax in sample.annotation:
                 cls_name = dataset.id_to_name[int(cls_id)]
                 print(f"  {cls_name} at {xmin:.0f}, {ymin:.0f}, {xmax:.0f}, {ymax:.0f}")
-            print(f"++++++ Annotation ++++++")
+            print(f"++++++++++++++++++++++++")
             img = sample.image.numpy()
             for cls_id, xmin, ymin, xmax, ymax in sample.annotation:
                 cls_name = dataset.id_to_name[int(cls_id)]
