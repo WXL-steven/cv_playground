@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Union, Tuple, List, Callable, Set, Dict
 
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 import cv2
@@ -31,6 +32,17 @@ class VOC2012BBoxContent:
     sample_name: str = field()
     image: torch.Tensor = field()
     annotation: torch.Tensor = field()
+
+
+class VOC2012BBoxTransform:
+    def __call__(
+            self,
+            image: np.ndarray,
+            annotation: np.ndarray,
+            *args,
+            **kwargs
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        raise NotImplementedError
 
 
 class VOC2012BBoxDataset(Dataset):
@@ -223,8 +235,8 @@ class VOC2012BBoxDataset(Dataset):
             root_dir: Optional[Union[str, Path]] = None,
             images_dir: Optional[Union[str, Path]] = None,
             annotations_dir: Optional[Union[str, Path]] = None,
-            auto_scan: bool = True,
-            use_rgb: bool = False
+            transform: Optional[VOC2012BBoxTransform] = None,
+            auto_scan: bool = True
     ) -> None:
         # 超类实例化
         super().__init__()
@@ -238,7 +250,7 @@ class VOC2012BBoxDataset(Dataset):
         self.name_to_id: Dict[str, int] = dict()
         self.id_to_name: Dict[int, str] = dict()
 
-        self.use_rgb = use_rgb
+        self.transform = transform
 
         # 处理路径
         self.split_file_path, self.images_dir, self.annotations_dir = self._check_and_get_paths(
@@ -303,42 +315,45 @@ class VOC2012BBoxDataset(Dataset):
         image = cv2.imread(sample_instance.image_path.as_posix())
         if image is None:
             raise RuntimeError(f"Failed to load image {sample_instance.image_path}")
-        if self.use_rgb:
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image_tensor = torch.from_numpy(image)
 
         # 载入标注
         if sample_instance.annotation_available is False or sample_instance.num_objects == 0:
-            return VOC2012BBoxContent(
-                sample_name=sample_instance.sample_name,
-                image=image_tensor,
-                annotation=torch.tensor([], dtype=torch.float32)
-            )
+            # return VOC2012BBoxContent(
+            #     sample_name=sample_instance.sample_name,
+            #     image=,
+            #     annotation=torch.tensor([], dtype=torch.float32)
+            # )
+            annotation = np.array([])
+        else:
 
-        annotation = []
-        e_tree = etree.parse(sample_instance.annotation_path.as_posix())
+            annotation = []
+            e_tree = etree.parse(sample_instance.annotation_path.as_posix())
 
-        obj_nodes = e_tree.xpath('/annotation/object')
-        for obj_node in obj_nodes:
-            cls_name, xmin, ymin, xmax, ymax = self._parse_boxes(obj_node)
-            cls_id = self.name_to_id.get(cls_name, -1)
+            obj_nodes = e_tree.xpath('/annotation/object')
+            for obj_node in obj_nodes:
+                cls_name, xmin, ymin, xmax, ymax = self._parse_boxes(obj_node)
+                cls_id = self.name_to_id.get(cls_name, -1)
 
-            if cls_id == -1:
-                self.class_names.add(cls_name)
-                cls_id = len(self.class_names)
-                self.name_to_id[cls_name] = cls_id
-                self.id_to_name[cls_id] = cls_name
+                if cls_id == -1:
+                    self.class_names.add(cls_name)
+                    cls_id = len(self.class_names)
+                    self.name_to_id[cls_name] = cls_id
+                    self.id_to_name[cls_id] = cls_name
 
-            annotation.append([cls_id, xmin, ymin, xmax, ymax])
+                annotation.append([cls_id, xmin, ymin, xmax, ymax])
 
-        annotation = torch.tensor(annotation, dtype=torch.float32)
+            annotation = np.array(annotation)
 
-        # TODO: 处理数据增强
+        if self.transform is not None:
+            image_tensor, annotation_tensor = self.transform(image=image, annotation=annotation)
+        else:
+            image_tensor = torch.from_numpy(image)
+            annotation_tensor = torch.from_numpy(annotation)
 
         return VOC2012BBoxContent(
             sample_name=sample_instance.sample_name,
             image=image_tensor,
-            annotation=annotation
+            annotation=annotation_tensor
         )
 
 
@@ -346,7 +361,7 @@ def _test():
     dataset = VOC2012BBoxDataset(
         split_file_path=r"../datasets/VOC2012/ImageSets/Main/train.txt",
         root_dir=r"../datasets/VOC2012/",
-        auto_scan=False
+        auto_scan=True
     )
 
     print(f"Dataset size: {len(dataset)}")
