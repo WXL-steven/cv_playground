@@ -34,6 +34,7 @@ class YOLOX_L(torch.nn.Module):
     def __init__(
             self,
             in_channels: int = 3,
+            num_classes: int = 80,
             *args,
             **kwargs
     ):
@@ -48,7 +49,7 @@ class YOLOX_L(torch.nn.Module):
         self.neck = PAFPN()
 
         self.heads = tuple(
-            YOLOXHead() for _ in range(3)
+            YOLOXHead(num_classes=num_classes) for _ in range(3)
         )
 
     def forward(self, x: torch.Tensor) -> Iterable[BBoxArchResult]:
@@ -68,17 +69,24 @@ class YOLOX_L(torch.nn.Module):
 
 def _test():
     import time
+    from yolox.utils import parse_yolox_output
+
     t0 = time.time()
-    module = YOLOX_L()
+    module = YOLOX_L(num_classes=1)
     print(f"Module created in {(time.time() - t0) * 1000:.2f} ms")
-    t0 = time.time()
-    features = module(torch.zeros((1, 3, 640, 640)))
-    print(f"Forward in {(time.time() - t0) * 1000:.2f} ms")
-    for name, res in features:
-        print(f"{name}: ")
-        for _name, feature in res:
-            print(f"  {_name}: {tuple(feature.shape) if feature is not None else 'None'}")
-        print()
+    with torch.no_grad():
+        t0 = time.time()
+        features = module(torch.zeros((1, 3, 640, 640)))
+        print(f"Forward in {(time.time() - t0) * 1000:.2f} ms")
+        for name, res in features:
+            print(f"{name}: ")
+            for _name, feature in res:
+                print(f"  {_name}: {tuple(feature.shape) if feature is not None else 'None'}")
+            print()
+
+        bboxes = parse_yolox_output(features)
+        print(f"Bboxes: {bboxes.shape}")
+        print(bboxes[0, 0, :])
 
 
 if __name__ == "__main__":

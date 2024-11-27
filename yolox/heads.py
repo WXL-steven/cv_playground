@@ -9,9 +9,9 @@ from yolox.modules import ConvModule
 
 @dataclass
 class BBoxArchResult:
-    cls: Optional[torch.Tensor] = field(default=None)
-    reg: Optional[torch.Tensor] = field(default=None)
-    obj: Optional[torch.Tensor] = field(default=None)
+    cls: Optional[torch.Tensor] = field(default=None)  # [N, num_classes, H, W]
+    reg: Optional[torch.Tensor] = field(default=None)  # [N, 4, H, W]
+    obj: Optional[torch.Tensor] = field(default=None)  # [N, 1, H, W]
 
     def __post_init__(self):
         self._data = (self.cls, self.reg, self.obj)

@@ -308,6 +308,10 @@ class VOC2012BBoxDataset(Dataset):
     def __len__(self) -> int:
         return len(self.samples)
 
+    @property
+    def num_classes(self) -> int:
+        return len(self.class_names)
+
     def __getitem__(self, index: int) -> VOC2012BBoxContent:
         sample_instance = self.samples[index]
 
@@ -364,7 +368,7 @@ def _test():
         auto_scan=True
     )
 
-    print(f"Dataset size: {len(dataset)}")
+    print(f"Dataset size: {len(dataset)}; Class num: {dataset.num_classes}")
 
     if len(dataset) == 0:
         return
