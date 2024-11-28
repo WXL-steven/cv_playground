@@ -405,5 +405,25 @@ def _test():
         cv2.destroyAllWindows()
 
 
+def _statistic():
+    from collections import defaultdict
+    dataset = VOC2012BBoxDataset(
+        split_file_path=r"../datasets/VOC2012/ImageSets/Main/train.txt",
+        root_dir=r"../datasets/VOC2012/",
+        auto_scan=True
+    )
+
+    cnt = defaultdict(int)
+    for i in range(len(dataset)):
+        sample = dataset[i]
+        for cls_id, xmin, ymin, xmax, ymax in sample.annotation:
+            cls_name = dataset.id_to_name[int(cls_id)]
+            cnt[cls_name] += 1
+
+    for cls_name, num in cnt.items():
+        print(f"{cls_name}: {num}")
+
+
 if __name__ == "__main__":
-    _test()
+    # _test()
+    _statistic()
