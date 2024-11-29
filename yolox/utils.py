@@ -59,8 +59,8 @@ def parse_yolox_output(
         boxes = boxes.reshape(batch_size, -1, 4)
 
         # 合并当前特征层的预测结果
-        output = torch.cat([obj, cls, boxes], dim=2)
+        output = torch.cat([obj, boxes, cls], dim=2)
         output_list.append(output)
 
     # 合并所有特征层的预测结果
-    return torch.cat(output_list, dim=1)  # [N, 8400, 1+NC+4]
+    return torch.cat(output_list, dim=1)  # [N, 8400, 1+4+NC]

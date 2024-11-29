@@ -13,7 +13,10 @@ def bce_loss(
     target = torch.zeros(1, 8400, 80)  # 那么先生成全零矩阵(负标签)
     target[:, :, target_idx] = 1  # 然后将目标类别设为1(正标签)
     """
-    assert pred.shape == target.shape, "Input shape miss match"
+    # 确保target可以广播到pred的形状
+    assert target.shape[-1] == pred.shape[-1], "Last dimension must match"
+    assert all(s1 <= s2 for s1, s2 in zip(target.shape[::-1], pred.shape[::-1])), \
+        "Target shape must be broadcastAble to pred shape"
 
     pred = torch.sigmoid(pred)
 

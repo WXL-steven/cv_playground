@@ -31,7 +31,7 @@ class VOC2012BBoxMetadata:
 class VOC2012BBoxContent:
     sample_name: str = field()
     image: torch.Tensor = field()
-    # annotation: torch.Tensor = field()
+    annotation: torch.Tensor = field()
 
 
 class VOC2012BBoxTransform:
