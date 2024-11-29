@@ -1,7 +1,7 @@
 import torch
 
 
-def binary_cross_entropy(
+def bce_loss(
         pred: torch.Tensor,
         target: torch.Tensor,
         epsilon: float = 1e-7
@@ -27,6 +27,13 @@ def iou_loss(
         pred: torch.Tensor,  # (x, y, w, h)
         target: torch.Tensor  # (xmin, ymin, xmax, ymax)
 ) -> torch.Tensor:
+    """
+    Usage1:
+    pred = torch.rand(1, 8400, 4)  # 假设有8400个锚框
+    pred[..., :2] *= 640
+    pred[..., 2:] *= 640
+    target = torch.tensor([100, 100, 200, 200])
+    """
     # 单次只接收一个真实框
     assert target.shape == (4,), "Input target should be 1-dim"
     # 确保最后一维元素数为4
@@ -60,7 +67,7 @@ def _test_bce():
     target = torch.zeros(1, 8400, 80)  # 那么先生成全零矩阵(负标签)
     target[:, :, target_idx] = 1  # 然后将目标类别设为1(正标签)
 
-    print(binary_cross_entropy(pred, target).mean())  # 鉴于是随机生成的,那么期望的损失就是(1-1/80)
+    print(bce_loss(pred, target).mean())  # 鉴于是随机生成的,那么期望的损失就是(1-1/80)
 
 
 def _test_iou():
